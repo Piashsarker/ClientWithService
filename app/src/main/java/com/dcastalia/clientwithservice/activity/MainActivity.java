@@ -1,16 +1,20 @@
 package com.dcastalia.clientwithservice.activity;
 
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.dcastalia.clientwithservice.R;
 import com.dcastalia.clientwithservice.boardCastReceiver.ConnectivityReceiver;
@@ -22,13 +26,36 @@ import com.dcastalia.clientwithservice.utils.Utils;
 public class MainActivity extends AppCompatActivity  implements ConnectivityReceiver.ConnectivityReceiverListener{
     private boolean binded = false;
     private MainServiceForClient serverService;
-    private Button buttonConnect, buttonDisconnect;
+    private Button buttonConnect, buttonDisconnect ,buttonMessage;
     private EditText editTextIpAddress;
     private final String TAG = "MainActivity";
     private TextView textConnectStatus ;
     private String ipAddress ;
+    private int count = 0 ;
 
 
+
+    /** This Boardcast Recevier is triggered to get the data from the service **/
+
+    private final BroadcastReceiver serviceMessageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            String action = intent.getAction();
+            if(action.equals(Constant.ACTION_MESSAGE)){
+               // Toast.makeText(context,, Toast.LENGTH_SHORT).show();
+                String message = intent.getStringExtra(Constant.WELCOME_MESSAGE_KEY);
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+                textConnectStatus.setText(message);
+
+            }
+
+        }
+    };
+
+
+
+    /** This is a service connection  for communicating with MainServiceForClient  **/
     ServiceConnection weatherServiceConnection = new ServiceConnection() {
 
         @Override
@@ -51,6 +78,8 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
         setContentView(R.layout.activity_main);
         findViews();
 
+
+        /** Button Connected OnClick Listener **/
         buttonConnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -58,13 +87,22 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
             }
         });
 
-
+        /** Button Disconnected OnClick Listener **/
         buttonDisconnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                stopServerService();
             }
         });
+
+        /** Button Message Sending Onclick Listener **/
+        buttonMessage.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                MainActivity.this.serverService.sendMessage(" A Simple Message "+count++);
+            }
+        });
+
 
 
     }
@@ -83,6 +121,7 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
 
     private void findViews() {
 
+        buttonMessage = (Button) findViewById(R.id.buttonMessage);
         editTextIpAddress = (EditText) findViewById(R.id.editText1);
         buttonConnect = (Button) findViewById(R.id.button1);
         textConnectStatus = (TextView) findViewById(R.id.txt_connect_status);
@@ -94,13 +133,21 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
     @Override
     protected void onResume() {
         super.onResume();
-        // register connection status listener
+        // register network connection status  connection status listener
         MyApplication.getInstance().setConnectivityListener(this);
+
+        IntentFilter intentFilter = new IntentFilter(Constant.ACTION_MESSAGE);
+        LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
+        manager.registerReceiver(serviceMessageReceiver, intentFilter);
+
     }
 
-
-
-
+    @Override
+    protected void onPause() {
+        super.onPause();
+        LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
+        manager.unregisterReceiver(serviceMessageReceiver);
+    }
 
     /** Do Start Server Work Here. This is a actionPerforming Method for button start Server **/
 
@@ -136,12 +183,14 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
 
         if (binded) {
             // Unbind Service
+
             this.unbindService(weatherServiceConnection);
             binded = false;
             Utils.log("Service Stopped For Network");
             editTextIpAddress.setVisibility(View.VISIBLE);
             buttonConnect.setVisibility(View.VISIBLE);
             buttonDisconnect.setEnabled(false);
+            buttonMessage.setEnabled(false);
         }
 
 
@@ -161,6 +210,8 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
         editTextIpAddress.setVisibility(View.GONE);
         buttonConnect.setVisibility(View.GONE);
         buttonDisconnect.setEnabled(true);
+        buttonMessage.setEnabled(true);
+
     }
 
 
