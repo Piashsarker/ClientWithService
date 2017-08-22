@@ -52,10 +52,16 @@ public class MainServiceForClient extends Service {
         serverConnectionThread = new ServerConnectionThread(IPAddress, new ServerConnectionThread.OnMessageReceived() {
             @Override
             public void messageReceived(String message) {
+                /** For Handling Messages Upcoming from the server and passing it using boardcast receiver **/
                 Intent intent = new Intent(Constant.ACTION_MESSAGE);
                 intent.putExtra(Constant.WELCOME_MESSAGE_KEY, message);
                 LocalBroadcastManager manager = LocalBroadcastManager.getInstance(getApplicationContext());
                 manager.sendBroadcast(intent);
+            }
+
+            @Override
+            public void bitmapReceived(byte[] bitmapArray) {
+
             }
         });
         serverConnectionThread.start();

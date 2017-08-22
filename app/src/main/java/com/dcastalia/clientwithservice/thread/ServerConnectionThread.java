@@ -1,11 +1,14 @@
 package com.dcastalia.clientwithservice.thread;
 
 import com.dcastalia.clientwithservice.utils.Constant;
+import com.dcastalia.clientwithservice.utils.MyApplication;
 import com.dcastalia.clientwithservice.utils.Utils;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -24,7 +27,8 @@ public class ServerConnectionThread extends Thread {
     private BufferedReader bufferedIn ;
     private OnMessageReceived mMessageListener ;
     private String mServerMessage ;
-
+    private InputStream inputStream ;
+    private DataInputStream dataInputStream ;
 
     public ServerConnectionThread(String ipAddress , OnMessageReceived mMessageListener) {
         this.mMessageListener = mMessageListener ;
@@ -46,37 +50,48 @@ public class ServerConnectionThread extends Thread {
                 //receives the message which the server sends back
 
                 /** Sent  a welcome message to server **/
-                sendData(" Hello I am Client "+socket.getInetAddress().getHostAddress());
+                sendData(" Hello I am Client "+ Utils.getWifiIpAddress(MyApplication.getInstance()));
 
                 while (messageReceiving){
 
-                    if(!socket.isClosed()){
+                    if(!socket.isClosed()) {
+
                         bufferedIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
                         // Check the the incoming stream leng by read method if return -1 than the client is not online **/
+                        if (bufferedIn.read() != -1) {
 
-                        if(bufferedIn.read()!=-1){
                             mServerMessage = bufferedIn.readLine();
-                            if(mServerMessage!=null && mMessageListener!=null){
-                                Utils.log("Message From Server : "+mServerMessage);
-
+                            if (mServerMessage != null && mMessageListener != null) {
+                                Utils.log("Message From Server : " + mServerMessage);
                                 /** Pass the message to this interface so that each class can listen or read who implemented the interface **/
                                 mMessageListener.messageReceived(mServerMessage);
                             }
                         }
+                        /** Check if the  dataInputStream has byte **/
+/*
+                     else if(dataInputStream!=null){
+                            int len = dataInputStream.readInt();
+                            byte[] data = new byte[len];
+                            if (len > 0) {
+                                dataInputStream.readFully(data);
+                            }
+                            Utils.log("Reading Byte From The Socket!");
+                            if(data!=null && mMessageListener!=null){
+                                mMessageListener.bitmapReceived(data);
+
+                            }
+                        }*/
 
 
-                        else{
+                        else {
                             // Close the server socket and stop receving
                             Utils.log("Server is not online, So Closing the connection");
-                            messageReceiving= false ;
                             socket.close();
                             this.interrupt();
                         }
 
-
-
                     }
-
 
                 }
 
@@ -92,6 +107,7 @@ public class ServerConnectionThread extends Thread {
 
     public void close(){
         sendData("Connection Closing ...");
+
         messageReceiving = false;
 
         if(socket!=null){
@@ -112,6 +128,8 @@ public class ServerConnectionThread extends Thread {
         bufferedIn = null;
         printWriter = null;
         mServerMessage = null;
+        dataInputStream = null ;
+        inputStream = null;
     }
 
 
@@ -137,7 +155,8 @@ public class ServerConnectionThread extends Thread {
     /** Delclare the  interface .
      * This method listen for every time when message recived from the socket. **/
     public interface OnMessageReceived {
-        public void messageReceived(String message);
+         void messageReceived(String message);
+         void bitmapReceived(byte[] bitmapArray);
     }
 
 }
