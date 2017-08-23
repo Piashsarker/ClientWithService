@@ -50,5 +50,10 @@
         android:layout_marginTop="30dp"
         android:text="@string/disconnect" />
 
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/imageScreenshot"/>
+
 
 </LinearLayout>

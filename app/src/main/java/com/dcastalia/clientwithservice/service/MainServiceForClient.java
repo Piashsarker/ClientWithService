@@ -40,7 +40,7 @@ public class MainServiceForClient extends Service {
     }
 
     @Override
-    public IBinder onBind(Intent intent) {
+    public IBinder onBind(final Intent intent) {
         Log.d(TAG, "onBinder() Called");
 
         serviceRunning = true ;
@@ -52,7 +52,7 @@ public class MainServiceForClient extends Service {
         serverConnectionThread = new ServerConnectionThread(IPAddress, new ServerConnectionThread.OnMessageReceived() {
             @Override
             public void messageReceived(String message) {
-                /** For Handling Messages Upcoming from the server and passing it using boardcast receiver **/
+                /** For Handling Messages Upcoming from the server and passing it using boardcast rec**/
                 Intent intent = new Intent(Constant.ACTION_MESSAGE);
                 intent.putExtra(Constant.WELCOME_MESSAGE_KEY, message);
                 LocalBroadcastManager manager = LocalBroadcastManager.getInstance(getApplicationContext());
@@ -61,6 +61,15 @@ public class MainServiceForClient extends Service {
 
             @Override
             public void bitmapReceived(byte[] bitmapArray) {
+                /** When receving the bitmap send it to corresponding activity
+                 * by boardCast . In our case MainActivity .
+                 */
+                Intent intent1 = new Intent(Constant.SCREEN_SHARE_START);
+                intent1.putExtra(Constant.BYTE_ARRAY_DATA , bitmapArray);
+                Utils.log("Bitmap Received In Service !");
+                LocalBroadcastManager manager = LocalBroadcastManager.getInstance(getApplicationContext());
+                manager.sendBroadcast(intent1);
+                Utils.log("Bitmap Sending Via BoardCast! ");
 
             }
         });

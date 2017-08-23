@@ -1,17 +1,15 @@
 package com.dcastalia.clientwithservice.thread;
 
+import android.graphics.Bitmap;
+
 import com.dcastalia.clientwithservice.utils.Constant;
 import com.dcastalia.clientwithservice.utils.MyApplication;
 import com.dcastalia.clientwithservice.utils.Utils;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.net.Socket;
 
 /**
@@ -21,17 +19,19 @@ import java.net.Socket;
 public class ServerConnectionThread extends Thread {
 
     private static String ipAddress;
-    private static Socket socket ;
-    private PrintWriter printWriter ;
-    private boolean messageReceiving=false ;
-    private BufferedReader bufferedIn ;
-    private OnMessageReceived mMessageListener ;
-    private String mServerMessage ;
-    private InputStream inputStream ;
-    private DataInputStream dataInputStream ;
+    private static Socket socket;
+    private boolean messageReceiving = false;
 
-    public ServerConnectionThread(String ipAddress , OnMessageReceived mMessageListener) {
-        this.mMessageListener = mMessageListener ;
+    private OnMessageReceived mMessageListener;
+    private String mServerMessage;
+    private DataInputStream dataInputStream = null;
+    private DataOutputStream dataOutputStream = null;
+    private String clientIp = null;
+    private String command;
+    private boolean isReachable = false;
+
+    public ServerConnectionThread(String ipAddress, OnMessageReceived mMessageListener) {
+        this.mMessageListener = mMessageListener;
         this.ipAddress = ipAddress;
     }
 
@@ -40,123 +40,158 @@ public class ServerConnectionThread extends Thread {
         try {
 
             socket = new Socket(ipAddress, Constant.SERVER_PORT);
-            if(socket.isConnected()){
+            if (socket.isConnected()) {
                 Utils.log("Socket Connected ! ");
-                messageReceiving = true ;
+                clientIp = socket.getInetAddress().getHostAddress();
 
-                /** Initialize the printWriter for writing in the socket or sent data**/
-                printWriter = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+                // attach data inputStream for listening incoming stream from the socket
 
-                //receives the message which the server sends back
+                dataInputStream = new DataInputStream(socket.getInputStream());
+
+                //attach data outPutStream for sending output stream through this socket
+                dataOutputStream = new DataOutputStream(socket.getOutputStream());
+
+                messageReceiving = true;
 
                 /** Sent  a welcome message to server **/
-                sendData(" Hello I am Client "+ Utils.getWifiIpAddress(MyApplication.getInstance()));
+                sendData(" Hello I am Client " + Utils.getWifiIpAddress(MyApplication.getInstance()));
 
-                while (messageReceiving){
+                while (messageReceiving) {
+                    Utils.log("Message Receiving Thread Running");
+                    // check the inputStream read for incoming data , return -1 if client disconnected in
+                    // other end.
 
-                    if(!socket.isClosed()) {
 
-                        bufferedIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    if (dataInputStream.read() != -1) {
+                        command = dataInputStream.readUTF();
+                        Utils.log("Message Received : " + command);
 
-                        // Check the the incoming stream leng by read method if return -1 than the client is not online **/
-                        if (bufferedIn.read() != -1) {
+                        /** Read the command and manages the sequece of reading data from the input stream , if sequence breaks
+                         * than the program will be stuck. Must manage the sequences . We are working with two type of data String , Byte Array .
+                         * #Check which types of data are the client sending
+                         * if byte[] than it's bitmap of screen sharing otherwise all command and data are
+                         * string
+                         */
 
-                            mServerMessage = bufferedIn.readLine();
-                            if (mServerMessage != null && mMessageListener != null) {
-                                Utils.log("Message From Server : " + mServerMessage);
-                                /** Pass the message to this interface so that each class can listen or read who implemented the interface **/
-                                mMessageListener.messageReceived(mServerMessage);
+                        if (command.equals(Constant.STRING_TYPE_DATA)) {
+                            String message = dataInputStream.readUTF();
+                            Utils.log("Message From Client " + message);
+                            if (message != null && mMessageListener != null) {
+                                /** Pass the message to service and let service process action based on it**/
+                                mMessageListener.messageReceived(message);
                             }
                         }
-                        /** Check if the  dataInputStream has byte **/
-/*
-                     else if(dataInputStream!=null){
-                            int len = dataInputStream.readInt();
-                            byte[] data = new byte[len];
-                            if (len > 0) {
-                                dataInputStream.readFully(data);
+                        if (command.equals(Constant.BYTE_ARRAY_DATA)) {
+                            /** This byte array consist the data of bitmap images **? First read is for length and second is for byte array  */
+                            int length = dataInputStream.readInt();
+                            /** Read the full byte from the inputStream using readFully()**/
+
+                            if (length > 0) {
+                                byte[] bitmapArray = new byte[length];
+                                dataInputStream.readFully(bitmapArray, 0, bitmapArray.length);
+                                /** Send the @bitmapArray to service and let service process it for each request **/
+                                if (bitmapArray != null && mMessageListener != null) {
+                                    mMessageListener.bitmapReceived(bitmapArray);
+                                    Utils.log(" Sending Bitmap To Service ! ");
+                                }
+                                Utils.log(" Bitmap Array Received from " + clientIp);
                             }
-                            Utils.log("Reading Byte From The Socket!");
-                            if(data!=null && mMessageListener!=null){
-                                mMessageListener.bitmapReceived(data);
-
-                            }
-                        }*/
 
 
-                        else {
-                            // Close the server socket and stop receving
-                            Utils.log("Server is not online, So Closing the connection");
-                            socket.close();
-                            this.interrupt();
                         }
 
+
+                    } else {
+                        mMessageListener.messageReceived("Client Disconnected " + clientIp);
+                        Utils.log("Client Disconnected " + ipAddress);
+                        messageReceiving = false;
                     }
 
                 }
 
+            } else {
+                Utils.log("Not Connected ! Retry ");
             }
-
-
-
 
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public void close(){
-        sendData("Connection Closing ...");
+    public void close() {
 
+        sendData("Connection Closing ...");
         messageReceiving = false;
 
-        if(socket!=null){
-            try {
-                socket.shutdownOutput();
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        if ( printWriter!= null) {
-            printWriter.flush();
-            printWriter.close();
-        }
-
         mMessageListener = null;
-        bufferedIn = null;
-        printWriter = null;
         mServerMessage = null;
-        dataInputStream = null ;
-        inputStream = null;
+        try {
+            dataInputStream.close();
+            dataOutputStream.close();
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        } catch (IOException io) {
+            io.printStackTrace();
+        }
     }
 
 
+    public boolean sendData(String data) {
+        boolean isSent = false;
+        /** Must manage sequence when writing data using dataOutPutStream , in client end you should use this sequence to receive data**/
 
+        try {
+            /** first int send for checking , second one is command of dataType , third is data which should be send
+             *  flush the data so that it can reach the client point , will close the dataOutPutStream when close the client  **/
+            dataOutputStream.write(1);
+            dataOutputStream.writeUTF(Constant.STRING_TYPE_DATA);
+            dataOutputStream.writeUTF(data);
+            dataOutputStream.flush();
+            Utils.log(data + " Send Successfull to " + ipAddress);
 
-    public boolean sendData(String data){
-        boolean isSent  = false;
-            if(socket!=null && socket.isConnected()){
-                if(printWriter!=null && !printWriter.checkError()){
-                    printWriter.println(data);
-                    Utils.log("Data Sending"+ data);
-                    isSent = true;
-                }
-
-            }
-            else{
-                Utils.log("Socket Null or Disconnected! ");
-            }
-
-
-        return  isSent ;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return isSent;
     }
-    /** Delclare the  interface .
-     * This method listen for every time when message recived from the socket. **/
+
+    public void sendBitmap(Bitmap bitmap) {
+
+
+        try {
+            /** Convert the bitmap into a byteArray so that we can send it using outPutStream **/
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream);
+            byte[] outBuffer = stream.toByteArray();
+            int length = outBuffer.length;
+
+            /** Must manage the sequence , first one is a int for checking ,
+             * second one is the command for byteArrayType , thirdOne is length and fourth is byteArray **/
+
+            dataOutputStream.write(1);
+            dataOutputStream.writeUTF(Constant.BYTE_ARRAY_DATA);
+            dataOutputStream.writeInt(length);
+            dataOutputStream.write(outBuffer);
+            dataOutputStream.flush();
+            Utils.log("Bitmap byteArray send successfully ! to " + ipAddress);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+
+    /**
+     * Delclare the  interface .
+     * This method listen for every time when message recived from the socket.
+     **/
     public interface OnMessageReceived {
-         void messageReceived(String message);
-         void bitmapReceived(byte[] bitmapArray);
+        void messageReceived(String message);
+
+        void bitmapReceived(byte[] bitmapArray);
     }
 
 }

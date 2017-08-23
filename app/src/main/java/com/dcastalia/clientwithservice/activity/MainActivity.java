@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.content.LocalBroadcastManager;
@@ -13,6 +15,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,6 +35,7 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
     private TextView textConnectStatus ;
     private String ipAddress ;
     private int count = 0 ;
+    private ImageView imageView ;
 
 
 
@@ -42,11 +46,26 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
         public void onReceive(Context context, Intent intent) {
 
             String action = intent.getAction();
+
+            /** There are two type of Action we have message and byte Array **/
             if(action.equals(Constant.ACTION_MESSAGE)){
                // Toast.makeText(context,, Toast.LENGTH_SHORT).show();
                 String message = intent.getStringExtra(Constant.WELCOME_MESSAGE_KEY);
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
                 textConnectStatus.setText(message);
+
+            }
+            else if(action.equals(Constant.SCREEN_SHARE_START)){
+              /** get the byteArray from the intent and view it to imageView **/
+              byte[] bitMapArray = intent.getByteArrayExtra(Constant.BYTE_ARRAY_DATA);
+              /** Convert the byte array to bitmap so that we can show it to imageView **/
+              Bitmap bitmap = BitmapFactory.decodeByteArray(bitMapArray,0, bitMapArray.length);
+              Utils.log("Bitmap Recived From The Service ! ");
+                if(bitmap!=null){
+                    imageView.setImageBitmap(bitmap);
+                    Utils.log("Bitmap Shwoing In ImageView");
+                    bitmap.recycle();
+                }
 
             }
 
@@ -126,6 +145,7 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
         buttonConnect = (Button) findViewById(R.id.button1);
         textConnectStatus = (TextView) findViewById(R.id.txt_connect_status);
         buttonDisconnect = (Button) findViewById(R.id.btn_disconnect);
+        imageView = (ImageView) findViewById(R.id.imageScreenshot);
         buttonDisconnect.setEnabled(false);
     }
 
@@ -135,18 +155,26 @@ public class MainActivity extends AppCompatActivity  implements ConnectivityRece
         super.onResume();
         // register network connection status  connection status listener
         MyApplication.getInstance().setConnectivityListener(this);
-
         IntentFilter intentFilter = new IntentFilter(Constant.ACTION_MESSAGE);
+        IntentFilter intentFilter1 = new IntentFilter(Constant.SCREEN_SHARE_START);
         LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
         manager.registerReceiver(serviceMessageReceiver, intentFilter);
+        manager.registerReceiver(serviceMessageReceiver,intentFilter1);
+        Utils.log("");
 
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
+        manager.unregisterReceiver(serviceMessageReceiver);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
-        manager.unregisterReceiver(serviceMessageReceiver);
+
     }
 
     /** Do Start Server Work Here. This is a actionPerforming Method for button start Server **/
